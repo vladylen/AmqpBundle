@@ -22,7 +22,7 @@ class Producer
      * @param \AMQPExchange $exchange        Amqp Exchange
      * @param array         $options Producer options
      */
-    public function __construct(\AMQPExchange $exchange, array $options)
+    public function __construct(\AMQPExchange $exchange, array $options = array())
     {
         $this->exchange = $exchange;
         $this->setOptions($options);
@@ -61,8 +61,7 @@ class Producer
     {
         // Merge attributes
         $attributes = empty($attributes) ? $this->options['publish_attributes'] :
-                      (empty($this->options['publish_attributes']) ? $attributes :
-                      array_merge($this->options['publish_attributes'], $attributes));
+                      array_merge($this->options['publish_attributes'], $attributes);
 
         // Publish the message for each routing keys
         $success = true;
@@ -75,14 +74,14 @@ class Producer
 
     protected function setOptions(array $options)
     {
+        if (!array_key_exists('publish_attributes', $options)) {
+            $options['publish_attributes'] = [];
+        }
+
+        if (!array_key_exists('routing_keys', $options)) {
+            $options['routing_keys'] = [];
+        }
+
         $this->options = $options;
-
-        if (!array_key_exists('publish_attributes', $this->options)) {
-            $this->options['publish_attributes'] = [];
-        }
-
-        if (!array_key_exists('routing_keys', $this->options)) {
-            $this->options['routing_keys'] = [];
-        }
     }
 }
