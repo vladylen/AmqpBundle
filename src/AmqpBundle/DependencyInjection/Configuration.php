@@ -1,5 +1,4 @@
 <?php
-
 namespace M6Web\Bundle\AmqpBundle\DependencyInjection;
 
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
@@ -26,6 +25,8 @@ class Configuration implements ConfigurationInterface
             ->end();
 
         $this->addConnections($rootNode);
+        $this->addExchanges($rootNode);
+        $this->addQueues($rootNode);
         $this->addProducers($rootNode);
         $this->addConsumers($rootNode);
 
@@ -41,7 +42,6 @@ class Configuration implements ConfigurationInterface
                     ->canBeUnset()
                     ->prototype('array')
                         ->children()
-                            ->scalarNode('class')->defaultValue('%m6_web_amqp.connection.class%')->end()
                             ->scalarNode('host')->defaultValue('localhost')->end()
                             ->scalarNode('port')->defaultValue(5672)->end()
                             ->scalarNode('timeout')->defaultValue(10)->end()
@@ -49,6 +49,70 @@ class Configuration implements ConfigurationInterface
                             ->scalarNode('password')->defaultValue('guest')->end()
                             ->scalarNode('vhost')->defaultValue('/')->end()
                             ->booleanNode('lazy')->defaultFalse()->end()
+                        ->end()
+                    ->end()
+                ->end()
+            ->end();
+    }
+
+    protected function addExchanges(ArrayNodeDefinition $node)
+    {
+        $node
+            ->children()
+                ->arrayNode('exchanges')
+                    ->useAttributeAsKey('name')
+                    ->canBeUnset()
+                    ->prototype('array')
+                        ->children()
+                            // base info
+                            ->scalarNode('connection')->defaultValue('default')->isRequired()->end()
+                            ->scalarNode('type')->isRequired()->end()
+
+                            // flags
+                            ->booleanNode('passive')->defaultFalse()->end()
+                            ->booleanNode('durable')->defaultTrue()->end()
+                            ->booleanNode('auto_delete')->defaultFalse()->end()
+
+                            // args
+                            ->arrayNode('arguments')
+                                ->prototype('scalar')->end()
+                                ->defaultValue(array())
+                            ->end()
+                        ->end()
+                    ->end()
+                ->end()
+            ->end();
+    }
+
+    protected function addQueues(ArrayNodeDefinition $node)
+    {
+        $node
+            ->children()
+                ->arrayNode('queues')
+                    ->useAttributeAsKey('name')
+                    ->canBeUnset()
+                    ->prototype('array')
+                        ->children()
+                            // base info
+                            ->scalarNode('exchange')->isRequired()->end()
+
+                            // flags
+                            ->booleanNode('passive')->defaultFalse()->end()
+                            ->booleanNode('durable')->defaultTrue()->end()
+                            ->booleanNode('exclusive')->defaultFalse()->end()
+                            ->booleanNode('auto_delete')->defaultFalse()->end()
+
+                            // args
+                            ->arrayNode('arguments')
+                                ->prototype('scalar')->end()
+                                ->defaultValue(array())
+                            ->end()
+
+                            // binding
+                            ->arrayNode('routing_keys')
+                                ->prototype('scalar')->end()
+                                ->defaultValue(array())
+                            ->end()
                         ->end()
                     ->end()
                 ->end()
@@ -65,37 +129,18 @@ class Configuration implements ConfigurationInterface
                     ->prototype('array')
                         ->children()
                             ->scalarNode('class')->defaultValue('%m6_web_amqp.producer.class%')->end()
-                            ->scalarNode('connection')->defaultValue('default')->end()
+                            ->scalarNode('exchange')->isRequired()->end()
 
-                            ->arrayNode('exchange_options')
-                                ->children()
-                                    // base info
-                                    ->scalarNode('name')->isRequired()->end()
-                                    ->scalarNode('type')->isRequired()->end()
+                            // binding
+                            ->arrayNode('routing_keys')
+                                ->prototype('scalar')->end()
+                                ->defaultValue(array())
+                            ->end()
 
-                                    // flags
-                                    ->booleanNode('passive')->defaultFalse()->end()
-                                    ->booleanNode('durable')->defaultTrue()->end()
-                                    ->booleanNode('auto_delete')->defaultFalse()->end()
-
-                                    // args
-                                    ->arrayNode('arguments')
-                                        ->prototype('scalar')->end()
-                                        ->defaultValue(array())
-                                    ->end()
-
-                                    // binding
-                                    ->arrayNode('routing_keys')
-                                        ->prototype('scalar')->end()
-                                        ->defaultValue(array())
-                                    ->end()
-
-                                    // default message attributes
-                                    ->arrayNode('publish_attributes')
-                                        ->prototype('scalar')->end()
-                                        ->defaultValue(array())
-                                    ->end()
-                                ->end()
+                            // default message attributes
+                            ->arrayNode('publish_attributes')
+                                ->prototype('scalar')->end()
+                                ->defaultValue(array())
                             ->end()
                         ->end()
                     ->end()
@@ -113,38 +158,7 @@ class Configuration implements ConfigurationInterface
                     ->prototype('array')
                         ->children()
                             ->scalarNode('class')->defaultValue('%m6_web_amqp.consumer.class%')->end()
-                            ->scalarNode('connection')->defaultValue('default')->end()
-
-                            ->arrayNode('exchange_options')
-                                ->children()
-                                    ->scalarNode('name')->isRequired()->end()
-                                ->end()
-                            ->end()
-
-                            ->arrayNode('queue_options')
-                                ->children()
-                                    // base
-                                    ->scalarNode('name')->isRequired()->end()
-
-                                    // flags
-                                    ->booleanNode('passive')->defaultFalse()->end()
-                                    ->booleanNode('durable')->defaultTrue()->end()
-                                    ->booleanNode('exclusive')->defaultFalse()->end()
-                                    ->booleanNode('auto_delete')->defaultFalse()->end()
-
-                                    // args
-                                    ->arrayNode('arguments')
-                                        ->prototype('scalar')->end()
-                                        ->defaultValue(array())
-                                    ->end()
-
-                                    // binding
-                                    ->arrayNode('routing_keys')
-                                        ->prototype('scalar')->end()
-                                        ->defaultValue(array())
-                                    ->end()
-                                ->end()
-                            ->end()
+                            ->scalarNode('queue')->isRequired()->end()
                         ->end()
                     ->end()
                 ->end()

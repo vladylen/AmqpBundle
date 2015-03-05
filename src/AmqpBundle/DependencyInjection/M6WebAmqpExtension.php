@@ -2,13 +2,13 @@
 
 namespace M6Web\Bundle\AmqpBundle\DependencyInjection;
 
+use M6Web\Bundle\AmqpBundle\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\HttpKernel\DependencyInjection\Extension;
 use Symfony\Component\DependencyInjection\Loader;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
-use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * This is the class that loads and manages your bundle configuration
@@ -28,11 +28,13 @@ class M6WebAmqpExtension extends Extension
         $loader = new Loader\YamlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
         $loader->load('services.yml');
 
-        if ($container->getParameter('kernel.debug')) {
+        if ($config['debug']) {
             $loader->load('data_collector.yml');
         }
 
         $this->loadConnections($container, $config);
+        $this->loadExchanges($container, $config);
+        $this->loadQueues($container, $config);
         $this->loadProducers($container, $config);
         $this->loadConsumers($container, $config);
     }
@@ -43,22 +45,134 @@ class M6WebAmqpExtension extends Extension
      */
     protected function loadConnections(ContainerBuilder $container, array $config)
     {
+        $debug = $config['debug'];
         foreach ($config['connections'] as $key => $connection) {
-            $connexionDefinition = new Definition($connection['class']);
-            $connexionDefinition->addMethodCall('setHost ', [$connection['host']])
-                                ->addMethodCall('setPort', [$connection['port']])
-                                ->addMethodCall('setReadTimeout', [$connection['timeout']])
-                                ->addMethodCall('setLogin', [$connection['login']])
-                                ->addMethodCall('setPassword', [$connection['password']])
-                                ->addMethodCall('setVhost', [$connection['vhost']]);
+            $serviceId = sprintf('m6_web_amqp.connection.%s', $key);
 
-            if (!$connection['lazy']) {
-                $connexionDefinition->addMethodCall('connect');
+            // Create connection service
+            $exchangeFactoryClass = $debug ? 'M6Web\Bundle\AmqpBundle\Logging\AMQPConnection' : 'AMQPConnection';
+            $definition = new Definition($exchangeFactoryClass);
+            $definition
+                ->addMethodCall('setHost ', [$connection['host']])
+                ->addMethodCall('setPort', [$connection['port']])
+                ->addMethodCall('setReadTimeout', [$connection['timeout']])
+                ->addMethodCall('setLogin', [$connection['login']])
+                ->addMethodCall('setPassword', [$connection['password']])
+                ->addMethodCall('setVhost', [$connection['vhost']]);
+            if ($debug) {
+                $definition->addMethodCall('setEventDispatcher', array(
+                    new Reference('event_dispatcher'),
+                    $container->getParameter('m6_web_amqp.event.command.class')
+                ));
             }
+            if (!$connection['lazy']) {
+                $definition->addMethodCall('connect');
+            } elseif (!method_exists($definition, 'setLazy')) {
+                throw new \InvalidArgumentException('It\'s not possible to declare a service as lazy. Are you using Symfony 2.3?');
+            }
+            $container->setDefinition($serviceId, $definition);
 
+            // Create connection exchange factory
+            $exchangeFactoryClass = 'M6Web\BundleAmqpBundle\Amqp\ExchangeFactory';
+            $exchangeFactoryArgs = array( new Reference($serviceId) );
+            if ($debug) {
+                $exchangeFactoryClass = 'M6Web\Bundle\AmqpBundle\Logging\ExchangeFactory';
+                $exchangeFactoryArgs[] = new Reference('event_dispatcher');
+                $exchangeFactoryArgs[] = $container->getParameter('m6_web_amqp.event.command.class');
+            }
             $container->setDefinition(
-                sprintf('m6_web_amqp.connection.%s', $key),
-                $connexionDefinition
+                sprintf('m6_web_amqp.connection.%s.exchange', $key),
+                new Definition($exchangeFactoryClass, $exchangeFactoryArgs)
+            );
+
+            // Create connection queue factory
+            $queue_factory_class = 'M6Web\BundleAmqpBundle\Amqp\QueueFactory';
+            $queue_factory_args = array( new Reference($serviceId) );
+            if ($debug) {
+                $queue_factory_class = 'M6Web\Bundle\AmqpBundle\Logging\QueueFactory';
+                $queue_factory_args[] = new Reference('event_dispatcher');
+                $queue_factory_args[] = $container->getParameter('m6_web_amqp.event.command.class');
+            }
+            $container->setDefinition(
+                sprintf('m6_web_amqp.connection.%s.queue', $key),
+                new Definition($queue_factory_class, $queue_factory_args)
+            );
+        }
+    }
+
+    /**
+     * @param ContainerBuilder $container
+     * @param array            $config
+     */
+    protected function loadExchanges(ContainerBuilder $container, array $config)
+    {
+        $exchanges = array();
+        foreach ($config['exchanges'] as $name => $options) {
+            $factoryDefinition = $container->getDefinition(
+                sprintf('m6_web_amqp.connection.%s.exchange', $options['connection'])
+            );
+
+            $factoryDefinition->addMethodCall(
+                'register',
+                [
+                    $name,
+                    $options['type'],
+                    $options['passive'],
+                    $options['durable'],
+                    $options['auto_delete'],
+                    $options['arguments']
+                ]
+            );
+
+            $exchanges[$options['connection']][] = $name;
+        }
+
+        foreach ($exchanges as $connection => $exchangeNames) {
+            $container->setParameter(
+                sprintf('m6_web_amqp.%s.exchanges', $connection),
+                $exchangeNames
+            );
+        }
+    }
+
+    /**
+     * @param ContainerBuilder $container
+     * @param array            $config
+     */
+    protected function loadQueues(ContainerBuilder $container, array $config)
+    {
+        $queues = array();
+        foreach ($config['queues'] as $name => $options) {
+            if (!isset($config['exchanges'][$options['exchange']])) {
+                throw new InvalidConfigurationException(sprintf('Exchange for queue `%s` with name `%s` is not defined.', $name, $options['exchange']));
+            }
+            $connection = $config['exchanges'][$options['exchange']]['connection'];
+
+            $factoryDefinition = $container->getDefinition(
+                sprintf('m6_web_amqp.connection.%s.queue', $connection)
+            );
+
+            $factoryDefinition->addMethodCall(
+                'register',
+                [
+                    $name,
+                    $options['exchange'],
+                    $options['passive'],
+                    $options['durable'],
+                    $options['exclusive'],
+                    $options['auto_delete'],
+                    $options['arguments'],
+                    $options['routing_keys']
+                ]
+            );
+
+            $queues[$connection][] = $name;
+        }
+
+        foreach ($queues as $connection => $queueNames) {
+            $container->setParameter(
+                sprintf('m6_web_amqp.%s.queues', $connection),
+                $queueNames
             );
         }
     }
@@ -70,43 +184,34 @@ class M6WebAmqpExtension extends Extension
     protected function loadProducers(ContainerBuilder $container, array $config)
     {
         foreach ($config['producers'] as $key => $producer) {
-            $lazy = $config['connections'][$producer['connection']]['lazy'];
+            if (!isset($config['exchanges'][$producer['exchange']])) {
+                throw new InvalidConfigurationException(sprintf('Exchange with name `%s` is not defined.', $producer['exchange']));
+            }
+            $connection = $config['exchanges'][$producer['exchange']]['connection'];
+            $lazy = $config['connections'][$connection]['lazy'];
 
-            // Create the producer with the factory
-            $producerDefinition = new Definition(
-                $producer['class'],
-                [
+            // Create producer definition
+            $definition = new Definition($producer['class']);
+            $definition
+                ->setFactoryService('m6_web_amqp.producer_factory')
+                ->setFactoryMethod('get')
+                ->setArguments(array(
+                    new Reference(sprintf('m6_web_amqp.connection.%s.exchange', $connection)),
                     $producer['class'],
-                    new Reference(sprintf('m6_web_amqp.connection.%s', $producer['connection'])),
-                    $producer['exchange_options'],
-                    $lazy,
-                ]
-            );
-
-            // Add the Event dispatcher & Command Event
-            $producerDefinition->addMethodCall(
-                'setEventDispatcher',
-                [
-                    new Reference('event_dispatcher'),
-                    $container->getParameter('m6_web_amqp.event.command.class')
-                ]
-            );
-
-            // Use a factory to build the producer
-            $producerDefinition->setFactoryService('m6_web_amqp.producer_factory')
-                               ->setFactoryMethod('get');
+                    $producer['exchange'],
+                    [
+                        'routing_keys' => $producer['routing_keys'],
+                        'publish_attributes' => $producer['publish_attributes'],
+                    ]
+                ));
 
             if ($lazy) {
-                if (!method_exists($producerDefinition, 'setLazy')) {
-                    throw new \InvalidArgumentException('It\'s not possible to declare a service as lazy. Are you using Symfony 2.3?');
-                }
-
-                $producerDefinition->setLazy(true);
+                $definition->setLazy(true);
             }
 
             $container->setDefinition(
                 sprintf('m6_web_amqp.producer.%s', $key),
-                $producerDefinition
+                $definition
             );
         }
     }
@@ -118,44 +223,36 @@ class M6WebAmqpExtension extends Extension
     protected function loadConsumers(ContainerBuilder $container, array $config)
     {
         foreach ($config['consumers'] as $key => $consumer) {
-            $lazy = $config['connections'][$consumer['connection']]['lazy'];
+            if (!isset($config['queues'][$consumer['queue']])) {
+                throw new InvalidConfigurationException(sprintf('Query with name `%s` is not defined.', $consumer['queue']));
+            }
+            $exchange = $config['queues'][$consumer['queue']]['exchange'];
+
+            if (!isset($config['exchanges'][$exchange])) {
+                throw new InvalidConfigurationException(sprintf('Exchange with name `%s` is not defined.', $exchange));
+            }
+            $connection = $config['exchanges'][$exchange]['connection'];
+
+            $lazy = $config['connections'][$connection]['lazy'];
 
             // Create the consumer with the factory
-            $consumerDefinition = new Definition(
-                $consumer['class'],
-                [
+            $definition = new Definition($consumer['class']);
+            $definition
+                ->setFactoryService('m6_web_amqp.consumer_factory')
+                ->setFactoryMethod('get')
+                ->setArguments(array(
+                    new Reference(sprintf('m6_web_amqp.connection.%s.queue', $connection)),
                     $consumer['class'],
-                    new Reference(sprintf('m6_web_amqp.connection.%s', $consumer['connection'])),
-                    $consumer['exchange_options'],
-                    $consumer['queue_options'],
-                    $lazy,
-                ]
-            );
-
-            // Add the Event dispatcher & Command Event
-            $consumerDefinition->addMethodCall(
-                'setEventDispatcher',
-                [
-                    new Reference('event_dispatcher'),
-                    $container->getParameter('m6_web_amqp.event.command.class')
-                ]
-            );
-
-            // Use a factory to build the consumer
-            $consumerDefinition->setFactoryService('m6_web_amqp.consumer_factory')
-                               ->setFactoryMethod('get');
+                    $consumer['queue'],
+                ));
 
             if ($lazy) {
-                if (!method_exists($consumerDefinition, 'setLazy')) {
-                    throw new \InvalidArgumentException('It\'s not possible to declare a service as lazy. Are you using Symfony 2.3?');
-                }
-
-                $consumerDefinition->setLazy(true);
+                $definition->setLazy(true);
             }
 
             $container->setDefinition(
                 sprintf('m6_web_amqp.consumer.%s', $key),
-                $consumerDefinition
+                $definition
             );
         }
     }

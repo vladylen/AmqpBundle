@@ -10,9 +10,14 @@ use Symfony\Component\EventDispatcher\Event as SymfonyEvent;
 class Command extends SymfonyEvent implements DispatcherInterface
 {
     /**
-     * @var integer
+     * @var float
      */
-    protected $executionTime = 0;
+    protected $endTime;
+
+    /**
+     * @var float
+     */
+    protected $startTime;
 
     /**
      * @var string
@@ -30,11 +35,7 @@ class Command extends SymfonyEvent implements DispatcherInterface
     protected $return;
 
     /**
-     * Set the command associated with this event
-     *
-     * @param string $command The command
-     *
-     * @return $this
+     * {@inheritdoc}
      */
     public function setCommand($command)
     {
@@ -44,27 +45,53 @@ class Command extends SymfonyEvent implements DispatcherInterface
     }
 
     /**
+     * {@inheritdoc}
+     */
+    public function setStartTime($start)
+    {
+        $this->startTime = $start;
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setEndTime($end)
+    {
+        $this->endTime = $end;
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setArguments(array $args)
+    {
+        $this->arguments = $args;
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setReturn($value)
+    {
+        $this->return = $value;
+
+        return $this;
+    }
+
+    /**
      * Get the command associated with this event
      *
-     * @return string the command
+     * @return string
      */
     public function getCommand()
     {
         return $this->command;
-    }
-
-    /**
-     * set the arguments
-     *
-     * @param array $v argus
-     *
-     * @return $this
-     */
-    public function setArguments($v)
-    {
-        $this->arguments = $v;
-
-        return $this;
     }
 
     /**
@@ -78,20 +105,6 @@ class Command extends SymfonyEvent implements DispatcherInterface
     }
 
     /**
-     * set the return value
-     *
-     * @param mixed $v value
-     *
-     * @return $this
-     */
-    public function setReturn($v)
-    {
-        $this->return = $v;
-
-        return $this;
-    }
-
-    /**
      * get the return value
      *
      * @return mixed
@@ -102,27 +115,13 @@ class Command extends SymfonyEvent implements DispatcherInterface
     }
 
     /**
-     * set the exec time
-     *
-     * @param float $v temps
-     *
-     * @return $this
-     */
-    public function setExecutionTime($v)
-    {
-        $this->executionTime = $v;
-
-        return $this;
-    }
-
-    /**
      * return the exec time
      *
-     * @return float $v temps
+     * @return float
      */
     public function getExecutionTime()
     {
-        return $this->executionTime;
+        return $this->endTime - $this->startTime;
     }
 
     /**

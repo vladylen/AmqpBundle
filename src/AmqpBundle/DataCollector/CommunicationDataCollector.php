@@ -1,50 +1,29 @@
 <?php
-namespace M6Web\Bundle\AmqpBundle\Amqp;
+namespace M6Web\Bundle\AmqpBundle\DataCollector;
 
-use Symfony\Component\HttpKernel\DataCollector\DataCollector as SymfonyDataCollector;
+use Symfony\Component\HttpKernel\DataCollector\DataCollector;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
- * Handle datacollector for amqp
+ * @author Warnar Boekkooi <warnar@boekkooi.net>
  */
-class DataCollector extends SymfonyDataCollector
+class CommunicationDataCollector extends DataCollector
 {
-    /**
-     * @var array
-     */
-    protected $commands;
-
-    /**
-     * @var string
-     */
-    protected $name;
-
-    /**
-     * @param string $name
-     *
-     * Construct the data collector
-     */
-    public function __construct($name)
+    public function __construct()
     {
-        $this->name             = $name;
         $this->data['commands'] = array();
     }
 
     /**
-     * Collect the data
-     *
-     * @param Request    $request   The request object
-     * @param Response   $response  The response object
-     * @param \Exception $exception An exception
+     * {@inheritdoc}
      */
     public function collect(Request $request, Response $response, \Exception $exception = null)
     {
-
     }
 
     /**
-     * Listen for aws command event
+     * Listen for amqp command event
      *
      * @param object $event The event object
      */
@@ -68,17 +47,7 @@ class DataCollector extends SymfonyDataCollector
     }
 
     /**
-     * Return the name of the collector
-     *
-     * @return string data collector name
-     */
-    public function getName()
-    {
-        return $this->name;
-    }
-
-    /**
-     * Temps total d'exec des commandes
+     * Get total time executing commands.
      *
      * @return float
      */
@@ -93,12 +62,20 @@ class DataCollector extends SymfonyDataCollector
     }
 
     /**
-     * Temps moyen d'exec
+     * Get average time it took to execute a single command
      *
      * @return float
      */
     public function getAvgExecutionTime()
     {
         return ($this->getTotalExecutionTime()) ? ($this->getTotalExecutionTime() / count($this->data['commands']) ) : 0;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getName()
+    {
+        return 'm6web_amqp_communication';
     }
 }

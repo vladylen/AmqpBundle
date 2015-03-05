@@ -1,11 +1,10 @@
 <?php
-
-namespace M6Web\Bundle\AmqpBundle\Amqp;
+namespace M6Web\Bundle\AmqpBundle;
 
 /**
  * Consumer
  */
-class Consumer extends AbstractAmqp
+class Consumer
 {
     /**
      * @var \AMQPQueue
@@ -13,20 +12,21 @@ class Consumer extends AbstractAmqp
     protected $queue = null;
 
     /**
-     * @var array
-     */
-    protected $queueOptions = [];
-
-    /**
      * __construct
      *
      * @param \AMQPQueue $queue        Amqp Queue
-     * @param array      $queueOptions Queue options
      */
-    public function __construct(\AMQPQueue $queue, Array $queueOptions)
+    public function __construct(\AMQPQueue $queue)
     {
-        $this->queue        = $queue;
-        $this->queueOptions = $queueOptions;
+        $this->queue = $queue;
+    }
+
+    /**
+     * @return \AMQPQueue
+     */
+    public function getQueue()
+    {
+        return $this->queue;
     }
 
     /**
@@ -41,52 +41,7 @@ class Consumer extends AbstractAmqp
      */
     public function getMessage($flags = AMQP_AUTOACK)
     {
-        return $this->call($this->queue, 'get', [$flags]);
-    }
-
-    /**
-     * Acknowledge the receipt of a message.
-     *
-     * @param string  $deliveryTag Delivery tag of last message to reject.
-     * @param integer $flags       AMQP_MULTIPLE or AMQP_NOPARAM
-     *
-     * @return boolean
-     *
-     * @throws \AMQPChannelException If the channel is not open.
-     * @throws \AMQPConnectionException If the connection to the broker was lost.
-     */
-    public function ackMessage($deliveryTag, $flags = AMQP_NOPARAM)
-    {
-        return $this->call($this->queue, 'ack', [$deliveryTag, $flags]);
-    }
-
-    /**
-     * Mark a message as explicitly not acknowledged.
-     *
-     * @param string  $deliveryTag Delivery tag of last message to reject.
-     * @param integer $flags       AMQP_NOPARAM or AMQP_REQUEUE to requeue the message(s).
-     *
-     * @throws \AMQPChannelException If the channel is not open.
-     * @throws \AMQPConnectionException If the connection to the broker was lost.
-     *
-     * @return boolean
-     */
-    public function nackMessage($deliveryTag, $flags = AMQP_NOPARAM)
-    {
-        return $this->call($this->queue, 'nack', [$deliveryTag, $flags]);
-    }
-
-    /**
-     * Purge the contents of the queue.
-     *
-     * @throws \AMQPChannelException If the channel is not open.
-     * @throws \AMQPConnectionException If the connection to the broker was lost.
-     *
-     * @return boolean
-     */
-    public function purge()
-    {
-        return $this->call($this->queue, 'purge');
+        return $this->queue->get($flags);
     }
 
     /**
@@ -110,22 +65,47 @@ class Consumer extends AbstractAmqp
     }
 
     /**
-     * @return \AMQPQueue
+     * Acknowledge the receipt of a message.
+     *
+     * @param string  $deliveryTag Delivery tag of last message to reject.
+     * @param integer $flags       AMQP_MULTIPLE or AMQP_NOPARAM
+     *
+     * @return boolean
+     *
+     * @throws \AMQPChannelException If the channel is not open.
+     * @throws \AMQPConnectionException If the connection to the broker was lost.
      */
-    public function getQueue()
+    public function ackMessage($deliveryTag, $flags = AMQP_NOPARAM)
     {
-        return $this->queue;
+        return $this->queue->ack($deliveryTag, $flags);
     }
 
     /**
-     * @param \AMQPQueue $queue
+     * Mark a message as explicitly not acknowledged.
      *
-     * @return \M6Web\Bundle\AmqpBundle\Amqp\Consumer
+     * @param string  $deliveryTag Delivery tag of last message to reject.
+     * @param integer $flags       AMQP_NOPARAM or AMQP_REQUEUE to requeue the message(s).
+     *
+     * @throws \AMQPChannelException If the channel is not open.
+     * @throws \AMQPConnectionException If the connection to the broker was lost.
+     *
+     * @return boolean
      */
-    public function setQueue(\AMQPQueue $queue)
+    public function nackMessage($deliveryTag, $flags = AMQP_NOPARAM)
     {
-        $this->queue = $queue;
+        return $this->queue->nack($deliveryTag, $flags);
+    }
 
-        return $this;
+    /**
+     * Purge the contents of the queue.
+     *
+     * @throws \AMQPChannelException If the channel is not open.
+     * @throws \AMQPConnectionException If the connection to the broker was lost.
+     *
+     * @return boolean
+     */
+    public function purge()
+    {
+        return $this->queue->purge();
     }
 }

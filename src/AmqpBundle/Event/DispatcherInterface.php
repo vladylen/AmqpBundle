@@ -9,30 +9,42 @@ namespace M6Web\Bundle\AmqpBundle\Event;
 interface DispatcherInterface
 {
     /**
-     * Set the sqs command associated with this event
+     * Set the amqp command associated with this event
      *
-     * @param string $command The sqs command
+     * @param string $command
+     * @return $this
      */
     public function setCommand($command);
 
     /**
-     * set execution time
+     * Set start time
      *
-     * @param float $v temps
+     * @param float $start A unix timestamp with microseconds
+     * @return $this
      */
-    public function setExecutionTime($v);
+    public function setStartTime($start);
 
     /**
-     * set the arguments
+     * Set end time
      *
-     * @param array $v argus
+     * @param float $end A unix timestamp with microseconds
+     * @return $this
      */
-    public function setArguments($v);
+    public function setEndTime($end);
 
     /**
-     * set the return value
+     * Set the arguments
      *
-     * @param mixed $v value
+     * @param array $args
+     * @return $this
      */
-    public function setReturn($v);
+    public function setArguments(array $args);
+
+    /**
+     * Set the return value
+     *
+     * @param mixed $value
+     * @return $this
+     */
+    public function setReturn($value);
 }
