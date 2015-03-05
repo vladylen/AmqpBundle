@@ -1,14 +1,13 @@
 <?php
+namespace Tests\Units\M6Web\Bundle\AmqpBundle;
 
-namespace M6Web\Bundle\AmqpBundle\Tests\Units\Amqp;
-
-use atoum;
-use M6Web\Bundle\AmqpBundle\Amqp\Producer as Base;
+use mageekguy\atoum;
+use M6Web\Bundle\AmqpBundle\Producer as Base;
 
 /**
  * Producer
  */
-class Producer extends atoum
+class Producer extends atoum\test
 {
     public function testConstruct()
     {
@@ -19,7 +18,7 @@ class Producer extends atoum
             ->and($producer = new Base($exchange, $exchangeOptions))
                 ->object($producer->getExchange())
                     ->isIdenticalTo($exchange)
-                ->array($producer->getExchangeOptions())
+                ->array($producer->getOptions())
                     ->hasKey('publish_attributes')
                     ->hasKey('routing_keys')
                     ->hasKey('options')
@@ -32,7 +31,7 @@ class Producer extends atoum
             ->if($exchange = $this->getExchange())
             ->and($exchangeOptions = ['publish_attributes' => ['test1'], 'routing_keys' => ['test2']])
             ->and($producer = new Base($exchange, $exchangeOptions))
-                ->array($producer->getExchangeOptions())
+                ->array($producer->getOptions())
                     ->isEqualTo($exchangeOptions);
     }
 

@@ -1,4 +1,3 @@
 <?php
-foreach (glob(__DIR__.'/src/*/Tests') as $dir) {
-    $runner->addTestsFromDirectory($dir);
-}
+/** @var \mageekguy\atoum\runner $runner */
+$runner->addTestsFromDirectory(__DIR__.'/tests');

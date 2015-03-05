@@ -14,7 +14,7 @@ class Consumer
     /**
      * __construct
      *
-     * @param \AMQPQueue $queue        Amqp Queue
+     * @param \AMQPQueue $queue Amqp Queue
      */
     public function __construct(\AMQPQueue $queue)
     {

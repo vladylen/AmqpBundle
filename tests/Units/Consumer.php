@@ -1,18 +1,17 @@
 <?php
 
-namespace M6Web\Bundle\AmqpBundle\Tests\Units\Amqp;
+namespace Tests\Units\M6Web\Bundle\AmqpBundle;
 
-use atoum;
-use M6Web\Bundle\AmqpBundle\Amqp\Consumer as Base;
+use mageekguy\atoum;
+use M6Web\Bundle\AmqpBundle\Consumer as Base;
 
 /**
  * Consumer
  */
-class Consumer extends atoum
+class Consumer extends atoum\test
 {
     public function testConstruct()
     {
-
         $this
             ->if($queue = $this->getQueue())
             ->if($queueOptions = [])

@@ -1,5 +1,6 @@
 <?php
 namespace M6Web\Bundle\AmqpBundle\Logging;
+
 use M6Web\Bundle\AmqpBundle\Exception\InvalidArgumentException;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
@@ -25,10 +26,8 @@ trait EventTrigger
     /**
      * Call a method and notify an event
      *
-     * @param object $object    Method object
-     * @param string $name      Method name
+     * @param string $method    Method name
      * @param array  $arguments Method arguments
-     *
      * @return mixed
      */
     protected function call($method, array $arguments)
