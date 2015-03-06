@@ -45,7 +45,7 @@
                 {% set time = command.executiontime %}
                 <td>{{ time }}</td>
                 <td>
-                    {{ command.arguments|join(', ') }}
+                    {{ dump(command.arguments) }}
                 </td>
             </tr>
         {% endfor %}
