@@ -26,8 +26,7 @@ class DeclareCommand extends Command implements ContainerAwareInterface
             ->addArgument(
                 'connections',
                 InputArgument::OPTIONAL | InputArgument::IS_ARRAY,
-                'A list of connection names',
-                ['default']
+                'A list of connection names, if none are provided all connections are used.'
             )
         ;
     }
@@ -35,6 +34,9 @@ class DeclareCommand extends Command implements ContainerAwareInterface
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $connections = $input->getArgument('connections');
+        if (empty($connection)) {
+            $connections = $this->getContainer()->getParameter('m6_web_amqp.connections');
+        }
 
         foreach ($connections as $connection) {
             $output->writeln(sprintf('Connection %s', $connection));

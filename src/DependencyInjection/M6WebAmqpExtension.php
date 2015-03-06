@@ -98,6 +98,11 @@ class M6WebAmqpExtension extends Extension
                 new Definition($queue_factory_class, $queue_factory_args)
             );
         }
+
+        $container->setParameter(
+            'm6_web_amqp.connections',
+            array_keys($config['connections'])
+        );
     }
 
     /**
