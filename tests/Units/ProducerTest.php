@@ -58,4 +58,22 @@ class ProducerTest extends \PHPUnit_Framework_TestCase
 
         $this->assertEquals($options, $producer->getOptions());
     }
+
+    public function i_should_not_be_able_to_publish_a_message_without_a_routing_key()
+    {
+        $options = array('routing_keys' => array());
+        $producer = new Producer($this->exchange, $options);
+
+        $this->assertFalse($producer->publish('message'));
+        $this->assertFalse($producer->publish('message', AMQP_NOPARAM, array(), array()));
+    }
+
+    public function i_should_be_able_to_publish_a_message()
+    {
+        $options = array('routing_keys' => array('my_route'));
+        $producer = new Producer($this->exchange, $options);
+
+        $this->assertFalse($producer->publish('message'));
+        $this->assertFalse($producer->publish('message', AMQP_NOPARAM, array(), array()));
+    }
 }

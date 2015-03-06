@@ -50,6 +50,7 @@ class Producer
      * @param array  $attributes One of content_type, content_encoding,
      *                           message_id, user_id, app_id, delivery_mode, priority,
      *                           timestamp, expiration, type or reply_to.
+     * @param string[] $routing_keys Override the default routing keys.
      *
      * @return boolean          TRUE on success or FALSE on failure.
      *
@@ -57,15 +58,18 @@ class Producer
      * @throws \AMQPChannelException If the channel is not open.
      * @throws \AMQPConnectionException If the connection to the broker was lost.
      */
-    public function publishMessage($message, $flags = AMQP_NOPARAM, array $attributes = array())
+    public function publish($message, $flags = AMQP_NOPARAM, array $attributes = array(), array $routing_keys = null)
     {
         // Merge attributes
-        $attributes = empty($attributes) ? $this->options['publish_attributes'] :
-                      array_merge($this->options['publish_attributes'], $attributes);
+        $attributes = $this->getPublishOptions($attributes);
+        $routing_keys = $this->getRoutingKeys($routing_keys);
+        if (empty($routing_keys)) {
+            return false;
+        }
 
         // Publish the message for each routing keys
         $success = true;
-        foreach ($this->options['routing_keys'] as $routingKey) {
+        foreach ($routing_keys as $routingKey) {
             $success &= $this->exchange->publish($message, $routingKey, $flags, $attributes);
         }
 
@@ -83,5 +87,19 @@ class Producer
         }
 
         $this->options = $options;
+    }
+
+    protected function getPublishOptions(array $attributes)
+    {
+        return empty($attributes) ? $this->options['publish_attributes'] :
+            array_merge($this->options['publish_attributes'], $attributes);
+    }
+
+    protected function getRoutingKeys(array $routing_keys = null)
+    {
+        if ($routing_keys === null) {
+            return $this->options['routing_keys'];
+        }
+        return $routing_keys;
     }
 }
