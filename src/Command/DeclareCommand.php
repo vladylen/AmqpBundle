@@ -1,23 +1,15 @@
 <?php
 namespace M6Web\Bundle\AmqpBundle\Command;
 
-use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use Symfony\Component\DependencyInjection\ContainerAwareInterface;
-use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * @author Warnar Boekkooi <warnar@boekkooi.net>
  */
-class DeclareCommand extends Command implements ContainerAwareInterface
+class DeclareCommand extends BaseCommand
 {
-    /**
-     * @var ContainerInterface|null
-     */
-    private $container;
-
     protected function configure()
     {
         $this
@@ -71,31 +63,5 @@ class DeclareCommand extends Command implements ContainerAwareInterface
                 $output->writeln(sprintf('<info>- %s</info>', $name));
             }
         }
-    }
-
-    /**
-     * @return ContainerInterface
-     * @throws \LogicException
-     */
-    protected function getContainer()
-    {
-        if (null === $this->container) {
-            $application = $this->getApplication();
-            if (null === $application) {
-                throw new \LogicException('The container cannot be retrieved as the application instance is not yet set.');
-            }
-
-            $this->container = $application->getKernel()->getContainer();
-        }
-
-        return $this->container;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function setContainer(ContainerInterface $container = null)
-    {
-        $this->container = $container;
     }
 }

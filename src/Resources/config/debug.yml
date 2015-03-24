@@ -1,0 +1,24 @@
+parameters:
+    m6_web_amqp.event.command.class: M6Web\Bundle\AmqpBundle\Event\Command
+
+services:
+    m6_web_amqp.abstract.connection:
+        abstract: true
+        class: M6Web\Bundle\AmqpBundle\Logging\AMQPConnection
+        calls:
+         - [ setEventDispatcher, [ @event_dispatcher, %m6_web_amqp.event.command.class% ] ]
+
+    m6_web_amqp.abstract.connection.exchange_factory:
+        class: M6Web\Bundle\AmqpBundle\Logging\ExchangeFactory
+        arguments: [ null, @event_dispatcher, %m6_web_amqp.event.command.class% ]
+
+    m6_web_amqp.abstract.connection.queue_factory:
+        abstract: true
+        class: M6Web\Bundle\AmqpBundle\Logging\QueueFactory
+        arguments: [ null, @event_dispatcher, %m6_web_amqp.event.command.class% ]
+
+    m6.data_collector.amqp:
+        class: M6Web\Bundle\AmqpBundle\DataCollector\CommunicationDataCollector
+        tags:
+        - { name: data_collector, template: 'M6WebAmqpBundle:Collector:amqp', id: 'm6web_amqp_communication' }
+        - { name: kernel.event_listener, event: amqp.command, method: onCommand }

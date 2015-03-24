@@ -1,14 +1,14 @@
 <?php
-
 namespace M6Web\Bundle\AmqpBundle\DependencyInjection;
 
 use M6Web\Bundle\AmqpBundle\Exception\InvalidConfigurationException;
-use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\Config\FileLocator;
-use Symfony\Component\HttpKernel\DependencyInjection\Extension;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\DefinitionDecorator;
 use Symfony\Component\DependencyInjection\Loader;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\HttpKernel\DependencyInjection\Extension;
 
 /**
  * This is the class that loads and manages your bundle configuration
@@ -26,10 +26,10 @@ class M6WebAmqpExtension extends Extension
         $config        = $this->processConfiguration($configuration, $configs);
 
         $loader = new Loader\YamlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
-        $loader->load('services.yml');
+        $loader->load('global.yml');
 
         if ($config['debug']) {
-            $loader->load('data_collector.yml');
+            $loader->load('debug.yml');
         }
 
         $this->loadConnections($container, $config);
@@ -45,60 +45,9 @@ class M6WebAmqpExtension extends Extension
      */
     protected function loadConnections(ContainerBuilder $container, array $config)
     {
-        $debug = $config['debug'];
         foreach ($config['connections'] as $key => $connection) {
-            $serviceId = sprintf('m6_web_amqp.connection.%s', $key);
-
-            // Create connection service
-            $exchangeFactoryClass = $debug ? 'M6Web\Bundle\AmqpBundle\Logging\AMQPConnection' : 'AMQPConnection';
-            $definition = new Definition($exchangeFactoryClass);
-            $definition
-                ->addMethodCall('setHost ', [$connection['host']])
-                ->addMethodCall('setPort', [$connection['port']])
-                ->addMethodCall('setReadTimeout', [$connection['timeout']])
-                ->addMethodCall('setLogin', [$connection['login']])
-                ->addMethodCall('setPassword', [$connection['password']])
-                ->addMethodCall('setVhost', [$connection['vhost']]);
-            if ($debug) {
-                $definition->addMethodCall('setEventDispatcher', array(
-                    new Reference('event_dispatcher'),
-                    $container->getParameter('m6_web_amqp.event.command.class')
-                ));
-            }
-            if (!$connection['lazy']) {
-                $definition->addMethodCall('connect');
-            } elseif (!method_exists($definition, 'setLazy')) {
-                throw new \InvalidArgumentException('It\'s not possible to declare a service as lazy. Are you using Symfony 2.3?');
-            }
-            $container->setDefinition($serviceId, $definition);
-
-            // Create connection exchange factory
-            $exchangeFactoryClass = 'M6Web\BundleAmqpBundle\Amqp\ExchangeFactory';
-            $exchangeFactoryArgs = array( new Reference($serviceId) );
-            if ($debug) {
-                $exchangeFactoryClass = 'M6Web\Bundle\AmqpBundle\Logging\ExchangeFactory';
-                $exchangeFactoryArgs[] = new Reference('event_dispatcher');
-                $exchangeFactoryArgs[] = $container->getParameter('m6_web_amqp.event.command.class');
-            }
-            $container->setDefinition(
-                sprintf('m6_web_amqp.connection.%s.exchange', $key),
-                new Definition($exchangeFactoryClass, $exchangeFactoryArgs)
-            );
-
-            // Create connection queue factory
-            $queue_factory_class = 'M6Web\BundleAmqpBundle\Amqp\QueueFactory';
-            $queue_factory_args = array( new Reference($serviceId) );
-            if ($debug) {
-                $queue_factory_class = 'M6Web\Bundle\AmqpBundle\Logging\QueueFactory';
-                $queue_factory_args[] = new Reference('event_dispatcher');
-                $queue_factory_args[] = $container->getParameter('m6_web_amqp.event.command.class');
-            }
-            $container->setDefinition(
-                sprintf('m6_web_amqp.connection.%s.queue', $key),
-                new Definition($queue_factory_class, $queue_factory_args)
-            );
+            $this->defineConnection($container, $key, $connection);
         }
-
         $container->setParameter(
             'm6_web_amqp.connections',
             array_keys($config['connections'])
@@ -113,21 +62,7 @@ class M6WebAmqpExtension extends Extension
     {
         $exchanges = array();
         foreach ($config['exchanges'] as $name => $options) {
-            $factoryDefinition = $container->getDefinition(
-                sprintf('m6_web_amqp.connection.%s.exchange', $options['connection'])
-            );
-
-            $factoryDefinition->addMethodCall(
-                'register',
-                [
-                    $name,
-                    $options['type'],
-                    $options['passive'],
-                    $options['durable'],
-                    $options['auto_delete'],
-                    $options['arguments']
-                ]
-            );
+            $this->registerConnectionExchange($container, $name, $options);
 
             $exchanges[$options['connection']][] = $name;
         }
@@ -148,30 +83,9 @@ class M6WebAmqpExtension extends Extension
     {
         $queues = array();
         foreach ($config['queues'] as $name => $options) {
-            if (!isset($config['exchanges'][$options['exchange']])) {
-                throw new InvalidConfigurationException(sprintf('Exchange for queue `%s` with name `%s` is not defined.', $name, $options['exchange']));
-            }
-            $connection = $config['exchanges'][$options['exchange']]['connection'];
+            $this->registerConnectionQueue($container, $name, $options);
 
-            $factoryDefinition = $container->getDefinition(
-                sprintf('m6_web_amqp.connection.%s.queue', $connection)
-            );
-
-            $factoryDefinition->addMethodCall(
-                'register',
-                [
-                    $name,
-                    $options['exchange'],
-                    $options['passive'],
-                    $options['durable'],
-                    $options['exclusive'],
-                    $options['auto_delete'],
-                    $options['arguments'],
-                    $options['routing_keys']
-                ]
-            );
-
-            $queues[$connection][] = $name;
+            $queues[$this->findConnectionByExchange($container, $options['exchange'])][] = $name;
         }
 
         foreach ($queues as $connection => $queueNames) {
@@ -189,36 +103,10 @@ class M6WebAmqpExtension extends Extension
     protected function loadProducers(ContainerBuilder $container, array $config)
     {
         foreach ($config['producers'] as $key => $producer) {
-            if (!isset($config['exchanges'][$producer['exchange']])) {
-                throw new InvalidConfigurationException(sprintf('Exchange with name `%s` is not defined.', $producer['exchange']));
-            }
-            $connection = $config['exchanges'][$producer['exchange']]['connection'];
-            $lazy = $config['connections'][$connection]['lazy'];
-
-            // Create producer definition
-            $definition = new Definition($producer['class']);
-            $definition
-                ->setFactoryService('m6_web_amqp.producer_factory')
-                ->setFactoryMethod('get')
-                ->setArguments(array(
-                    new Reference(sprintf('m6_web_amqp.connection.%s.exchange', $connection)),
-                    $producer['class'],
-                    $producer['exchange'],
-                    [
-                        'routing_keys' => $producer['routing_keys'],
-                        'publish_attributes' => $producer['publish_attributes'],
-                    ]
-                ));
-
-            if ($lazy) {
-                $definition->setLazy(true);
-            }
-
-            $container->setDefinition(
-                sprintf('m6_web_amqp.producer.%s', $key),
-                $definition
-            );
+            $this->defineProducer($container, $key, $producer);
         }
+
+        $container->setParameter('m6_web_amqp.producers', array_keys($config['producers']));
     }
 
     /**
@@ -227,39 +115,310 @@ class M6WebAmqpExtension extends Extension
      */
     protected function loadConsumers(ContainerBuilder $container, array $config)
     {
-        foreach ($config['consumers'] as $key => $consumer) {
-            if (!isset($config['queues'][$consumer['queue']])) {
-                throw new InvalidConfigurationException(sprintf('Query with name `%s` is not defined.', $consumer['queue']));
-            }
-            $exchange = $config['queues'][$consumer['queue']]['exchange'];
+        foreach ($config['consumers'] as $key => $options) {
+            $this->defineConsumer($container, $key, $options);
+        }
 
-            if (!isset($config['exchanges'][$exchange])) {
-                throw new InvalidConfigurationException(sprintf('Exchange with name `%s` is not defined.', $exchange));
-            }
-            $connection = $config['exchanges'][$exchange]['connection'];
+        $container->setParameter('m6_web_amqp.consumers', array_keys($config['consumers']));
+    }
 
-            $lazy = $config['connections'][$connection]['lazy'];
+    /**
+     * @param ContainerBuilder $container
+     * @param $connection
+     * @param $config
+     * @return string
+     */
+    protected function defineConnection(ContainerBuilder $container, $connection, array $config)
+    {
+        $serviceId = $this->getConnectionServiceId($connection);
 
-            // Create the consumer with the factory
-            $definition = new Definition($consumer['class']);
-            $definition
-                ->setFactoryService('m6_web_amqp.consumer_factory')
-                ->setFactoryMethod('get')
-                ->setArguments(array(
-                    new Reference(sprintf('m6_web_amqp.connection.%s.queue', $connection)),
-                    $consumer['class'],
-                    $consumer['queue'],
-                ));
+        // Create connection service
+        $definition = new DefinitionDecorator('m6_web_amqp.abstract.connection');
+        $definition
+            ->addMethodCall('setHost ', [$config['host']])
+            ->addMethodCall('setPort', [$config['port']])
+            ->addMethodCall('setReadTimeout', [$config['timeout']])
+            ->addMethodCall('setLogin', [$config['login']])
+            ->addMethodCall('setPassword', [$config['password']])
+            ->addMethodCall('setVhost', [$config['vhost']]);
+        $container->setDefinition($serviceId, $definition);
 
-            if ($lazy) {
-                $definition->setLazy(true);
-            }
+        // Create related services
+        $this->defineConnectionExchangeFactory($container, $serviceId);
+        $this->defineConnectionQueueFactory($container, $serviceId);
 
-            $container->setDefinition(
-                sprintf('m6_web_amqp.consumer.%s', $key),
-                $definition
+        return $serviceId;
+    }
+
+    /**
+     * @param ContainerBuilder $container
+     * @param string $serviceId
+     */
+    protected function defineConnectionExchangeFactory(ContainerBuilder $container, $serviceId)
+    {
+        $definition = new DefinitionDecorator('m6_web_amqp.abstract.connection.exchange_factory');
+        $definition->replaceArgument(0, new Reference($serviceId));
+
+        $container->setDefinition($serviceId.'.exchange', $definition);
+    }
+
+    /**
+     * @param ContainerBuilder $container
+     * @param string $serviceId
+     */
+    private function defineConnectionQueueFactory(ContainerBuilder $container, $serviceId)
+    {
+        $definition = new DefinitionDecorator('m6_web_amqp.abstract.connection.queue_factory');
+        $definition->replaceArgument(0, new Reference($serviceId));
+
+        $container->setDefinition($serviceId.'.queue', $definition);
+    }
+
+    /**
+     * @param ContainerBuilder $container
+     * @param $exchange
+     * @param $options
+     */
+    protected function registerConnectionExchange(ContainerBuilder $container, $exchange, array $options)
+    {
+        $connection = $options['connection'];
+        $this->requireConnection($container, $connection);
+
+        // Register the exchange
+        $container
+            ->getDefinition($this->getConnectionServiceId($connection).'.exchange')
+            ->addMethodCall(
+                'register',
+                [
+                    $exchange,
+                    $options['type'],
+                    $options['passive'],
+                    $options['durable'],
+                    $options['auto_delete'],
+                    $options['arguments']
+                ]
+            );
+
+        // Define a abstract exchange
+        $abstractExchange = new Definition(\AMQPExchange::class);
+        $abstractExchange
+            ->setPublic(false)
+            ->setAbstract(true)
+            ->setFactory([
+                new Reference(
+                    $this->getConnectionServiceId($connection).'.exchange'
+                ),
+                'create'
+            ])
+            ->setArguments([ null ]);
+
+        $container->setDefinition(
+            $this->getAbstractExchangeServiceId($exchange),
+            $abstractExchange
+        );
+    }
+
+    /**
+     * @param ContainerBuilder $container
+     * @param string $queue
+     * @param array $options
+     */
+    protected function registerConnectionQueue(ContainerBuilder $container, $queue, array $options)
+    {
+        $exchange = $options['exchange'];
+        $this->requireExchange($container, $exchange);
+
+        $connection = $this->findConnectionByExchange($container, $exchange);
+
+        // Register the queue
+        $container
+            ->getDefinition($this->getConnectionServiceId($connection).'.queue')
+            ->addMethodCall(
+                'register',
+                [
+                    $queue,
+                    $exchange,
+                    $options['passive'],
+                    $options['durable'],
+                    $options['exclusive'],
+                    $options['auto_delete'],
+                    $options['arguments'],
+                    $options['routing_keys']
+                ]
+            );
+
+        // Define a abstract queue
+        $abstractQueue = new Definition(\AMQPQueue::class);
+        $abstractQueue
+            ->setPublic(false)
+            ->setAbstract(true)
+            ->setFactory([
+                new Reference(sprintf(
+                    '%s.exchange',
+                    $this->getConnectionServiceId($connection)
+                )),
+                'create'
+            ])
+            ->setArguments([ null ]);
+
+        $container->setDefinition(
+            $this->getAbstractQueueServiceId($queue),
+            $abstractQueue
+        );
+    }
+
+    /**
+     * @param ContainerBuilder $container
+     * @param $key
+     * @param $producer
+     */
+    protected function defineProducer(ContainerBuilder $container, $key, $producer)
+    {
+        $this->requireExchange($container, $producer['exchange']);
+
+        // Create exchange
+        $exchangeId = sprintf('m6_web_amqp.producer_exchange.%s', $key);
+        $exchange = new DefinitionDecorator(
+            $this->getAbstractExchangeServiceId($producer['exchange'])
+        );
+        $exchange
+            ->setPublic(false)
+            ->replaceArgument(0, $producer['exchange']);
+        $container->setDefinition($exchangeId, $exchange);
+
+        // Create producer definition
+        $container->setDefinition(
+            sprintf('m6_web_amqp.producer.%s', $key),
+            new Definition(
+                $producer['class'],
+                [
+                    new Reference($exchangeId),
+                    [
+                        'routing_keys' => $producer['routing_keys'],
+                        'publish_attributes' => $producer['publish_attributes'],
+                    ]
+                ]
+            )
+        );
+    }
+
+    /**
+     * @param ContainerBuilder $container
+     * @param string $key
+     * @param array $options
+     */
+    protected function defineConsumer(ContainerBuilder $container, $key, array $options)
+    {
+        $queueServices = [];
+        foreach ($options['queue'] as $queueName) {
+            $queueServices[] = $this->defineConsumerQueue($container, $key, $queueName);
+        }
+
+        // Create the consumer with the factory
+        $container->setDefinition(
+            sprintf('m6_web_amqp.consumer.%s', $key),
+            new Definition(
+                $options['class'],
+                [$queueServices]
+            )
+        );
+    }
+
+    /**
+     * @param ContainerBuilder $container
+     * @param string $consumer
+     * @param string $queue
+     * @return Reference
+     */
+    protected function defineConsumerQueue(ContainerBuilder $container, $consumer, $queue)
+    {
+        $queueId = sprintf('m6_web_amqp.consumer_queue.%s.%s', $consumer, $queue);
+        $connection = $this->findConnectionByQueue($container, $queue);
+
+        // Create exchange based on the factory
+        $service = new DefinitionDecorator(
+            $this->getAbstractQueueServiceId($queue)
+        );
+        $service
+            ->setPublic(false)
+            ->setFactory([
+                new Reference(
+                    $this->getConnectionServiceId($connection) . '.queue'
+                ),
+                'create'
+            ])
+            ->replaceArgument(0, $queue);
+        $container->setDefinition($queueId, $service);
+
+        return new Reference($queueId);
+    }
+
+    private function requireConnection(ContainerBuilder $container, $name)
+    {
+        if (!$container->has($this->getConnectionServiceId($name))) {
+            throw new InvalidConfigurationException(
+                sprintf('No connection with name `%s` is defined.', $name)
             );
         }
     }
 
+    private function requireExchange(ContainerBuilder $container, $name)
+    {
+        if (!$container->has($this->getAbstractExchangeServiceId($name))) {
+            throw new InvalidConfigurationException(
+                sprintf('No exchange with name `%s` is defined.', $name)
+            );
+        }
+    }
+
+    private function getConnectionServiceId($connection)
+    {
+        return sprintf('m6_web_amqp.connection.%s', $connection);
+    }
+
+    private function getAbstractExchangeServiceId($exchange)
+    {
+        return sprintf('m6_web_amqp.abstract.exchange.%s', $exchange);
+    }
+
+    private function getAbstractQueueServiceId($queue)
+    {
+        return sprintf('m6_web_amqp.abstract.queue.%s', $queue);
+    }
+
+    private function findConnectionByExchange(ContainerBuilder $container, $name)
+    {
+        $connections = $container->getParameter('m6_web_amqp.connections');
+        foreach ($connections as $connection) {
+            $exchanges = $container->getParameter(
+                sprintf('m6_web_amqp.%s.exchanges', $connection)
+            );
+
+            if(in_array($name, $exchanges, true)) {
+                return $connection;
+            }
+        }
+
+        throw new InvalidConfigurationException(
+            sprintf('No connection for exchange with name `%s` was found.', $name)
+        );
+    }
+
+    private function findConnectionByQueue(ContainerBuilder $container, $name)
+    {
+        $connections = $container->getParameter('m6_web_amqp.connections');
+        foreach ($connections as $connection) {
+            $queues = $container->getParameter(
+                sprintf('m6_web_amqp.%s.queues', $connection)
+            );
+
+            if(in_array($name, $queues, true)) {
+                return $connection;
+            }
+        }
+
+        throw new InvalidConfigurationException(
+            sprintf('No connection for queue with name `%s` was found.', $name)
+        );
+    }
 }
