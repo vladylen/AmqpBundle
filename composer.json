@@ -15,11 +15,12 @@
         }
     },
     "require" : {
-        "php" : ">=5.4",
+        "php" : ">=5.5",
         "ext-amqp" : "*",
 
         "symfony/dependency-injection": "~2.3",
-        "symfony/config": "~2.3"
+        "symfony/config": "~2.3",
+        "doctrine/inflector": "~1.0"
     },
     "require-dev" : {
         "symfony/console": "~2.3",
@@ -33,5 +34,18 @@
         "ocramius/proxy-manager": "Required for lazy connections",
         "symfony/console": "Required for the declare command",
         "sensio/distribution-bundle": "Required to use the composer script handler"
+    },
+    "archive": {
+        "exclude": [
+            "/vendor",
+            "/docker",
+            "/tests",
+            ".gitattributes",
+            ".gitignore",
+            ".php_cs ",
+            ".travis.yml",
+            "composer.lock",
+            "phpunit.xml.dist"
+        ]
     }
 }
