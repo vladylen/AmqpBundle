@@ -17,8 +17,12 @@ abstract class StandardConsumer implements Consumer
     /**
      * @param \AMQPQueue[] $queues
      */
-    public function __construct(array $queues)
+    public function setQueues(array $queues)
     {
+        if (!empty($this->queues)) {
+            throw new \LogicException('Queues can only be set once per consumer instance.');
+        }
+
         $this->queues = $queues;
     }
 

@@ -8,7 +8,7 @@ interface Consumer {
     /**
      * @param \AMQPQueue[] $queues
      */
-    public function __construct(array $queues);
+    public function setQueues(array $queues);
 
     /**
      * Consume messages.

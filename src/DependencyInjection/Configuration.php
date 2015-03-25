@@ -156,7 +156,7 @@ class Configuration implements ConfigurationInterface
                     ->useAttributeAsKey('key')
                     ->prototype('array')
                         ->children()
-                            ->scalarNode('class')->isRequired()->end()
+                            ->scalarNode('service')->isRequired()->end()
                             ->arrayNode('queue')
                                 ->beforeNormalization()
                                     ->ifString()

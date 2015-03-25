@@ -314,14 +314,14 @@ class M6WebAmqpExtension extends Extension
             $queueServices[] = $this->defineConsumerQueue($container, $key, $queueName);
         }
 
-        // Create the consumer with the factory
-        $container->setDefinition(
-            sprintf('m6_web_amqp.consumer.%s', $key),
-            new Definition(
-                $options['class'],
-                [$queueServices]
-            )
-        );
+        $consumerId = sprintf('m6_web_amqp.consumer.%s', $key);
+
+        $service = new Definition();
+        $service
+            ->addMethodCall('setQueues', [ $queueServices ])
+            ->addTag('m6_web_amqp.internal.consumer', ['service' => $options['service']]);
+
+        $container->setDefinition($consumerId, $service);
     }
 
     /**
