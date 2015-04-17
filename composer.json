@@ -1,24 +1,51 @@
 {
     "name" : "m6web/amqp-bundle",
-    "description" : "Bundle AMQP",
-    "autoload" : {
-        "psr-4": { "M6Web\\Bundle\\": "src/" }
-    },
-    "config": {
-        "bin-dir": "bin/"
-    },
-    "minimum-stability" : "dev",
+    "description" : "Symfony AMQP Bundle using php-amqp",
+    "license": "MIT",
+    "type": "symfony-bundle",
+    "keywords": ["symfony", "amqp", "rabbitmq"],
     "prefer-stable" : true,
+    "minimum-stability" : "dev",
+    "autoload" : {
+        "psr-4": { "M6Web\\Bundle\\AmqpBundle\\": "src/" }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\M6Web\\Bundle\\AmqpBundle\\": "tests/"
+        }
+    },
     "require" : {
-        "php" : ">=5.4",
-        "ext-amqp" : "*"
+        "php" : ">=5.5",
+        "ext-amqp" : "*",
+
+        "symfony/dependency-injection": "~2.3",
+        "symfony/config": "~2.3",
+        "doctrine/inflector": "~1.0"
     },
     "require-dev" : {
-        "atoum/atoum-bundle" : "dev-master",
-        "m6web/coke" : "~1.2",
-        "m6web/symfony2-coding-standard" : "~1.1"
+        "symfony/console": "~2.3",
+        "symfony/http-kernel": "~2.3",
+        "symfony/event-dispatcher": "~2.3",
+        "sensio/distribution-bundle": "~2.3",
+
+        "phpunit/phpunit" : "~4.5"
     },
     "suggest": {
-        "ocramius/proxy-manager": "Required for lazy connections"
+        "ocramius/proxy-manager": "Required for lazy connections",
+        "symfony/console": "Required for the declare command",
+        "sensio/distribution-bundle": "Required to use the composer script handler"
+    },
+    "archive": {
+        "exclude": [
+            "/vendor",
+            "/docker",
+            "/tests",
+            ".gitattributes",
+            ".gitignore",
+            ".php_cs ",
+            ".travis.yml",
+            "composer.lock",
+            "phpunit.xml.dist"
+        ]
     }
 }

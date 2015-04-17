@@ -1,0 +1,19 @@
+parameters:
+    m6_web_amqp.producer.class: M6Web\Bundle\AmqpBundle\Producer
+
+services:
+    m6_web_amqp.abstract.connection:
+        abstract: true
+        class: AMQPConnection
+
+    m6_web_amqp.abstract.connection.exchange_factory:
+        abstract: true
+        class: M6Web\Bundle\AmqpBundle\Amqp\ExchangeFactory
+        arguments: [ null ]
+
+    m6_web_amqp.abstract.connection.queue_factory:
+        abstract: true
+        class: M6Web\Bundle\AmqpBundle\Amqp\QueueFactory
+        arguments: [ null ]
+
+
